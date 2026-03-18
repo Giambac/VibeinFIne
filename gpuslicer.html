@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPU Slicer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; overflow: hidden; cursor: none; user-select: none; -webkit-user-select: none; }
+canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// --- Resize ---
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// --- Constants ---
+const GRAVITY = 0.35;
+const GPU_SPAWN_INTERVAL_MIN = 600;
+const GPU_SPAWN_INTERVAL_MAX = 1400;
+const BOMB_CHANCE = 0.12;
+const MAX_LIVES = 3;
+const COMBO_TIME = 800;
+const SLASH_TRAIL_LENGTH = 20;
+
+// --- GPU Models ---
+const GPU_MODELS = [
+    { name: 'RTX 5090', color: '#76B900', accent: '#1A1A1A', tier: 'legendary', points: 50, w: 100, h: 45 },
+    { name: 'RTX 4090', color: '#76B900', accent: '#2D2D2D', tier: 'epic', points: 30, w: 95, h: 43 },
+    { name: 'RTX 4080', color: '#76B900', accent: '#3A3A3A', tier: 'rare', points: 20, w: 90, h: 42 },
+    { name: 'RTX 4070', color: '#88C840', accent: '#444', tier: 'uncommon', points: 15, w: 85, h: 40 },
+    { name: 'RTX 3090', color: '#5A9E00', accent: '#333', tier: 'epic', points: 25, w: 95, h: 43 },
+    { name: 'RTX 3080', color: '#5A9E00', accent: '#3A3A3A', tier: 'rare', points: 18, w: 90, h: 42 },
+    { name: 'RTX 3060', color: '#6DB200', accent: '#444', tier: 'common', points: 10, w: 80, h: 38 },
+    { name: 'GTX 1080', color: '#4A8C00', accent: '#555', tier: 'common', points: 8, w: 78, h: 37 },
+    { name: 'GT 710',   color: '#3A7200', accent: '#666', tier: 'trash', points: 3, w: 60, h: 30 },
+];
+
+const TIER_GLOW = {
+    legendary: '#FFD700',
+    epic: '#A855F7',
+    rare: '#3B82F6',
+    uncommon: '#22C55E',
+    common: '#9CA3AF',
+    trash: '#6B7280',
+};
+
+// --- Audio (Web Audio API) ---
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playSound(type) {
+    const now = audioCtx.currentTime;
+    const gain = audioCtx.createGain();
+    gain.connect(audioCtx.destination);
+
+    if (type === 'slice') {
+        const osc = audioCtx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(800 + Math.random() * 400, now);
+        osc.frequency.exponentialRampToValueAtTime(200, now + 0.15);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        osc.connect(gain);
+        osc.start(now);
+        osc.stop(now + 0.15);
+    } else if (type === 'bomb') {
+        const osc = audioCtx.createOscillator();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(30, now + 0.5);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+        osc.connect(gain);
+        osc.start(now);
+        osc.stop(now + 0.5);
+        // noise burst
+        const bufferSize = audioCtx.sampleRate * 0.3;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buffer;
+        const ng = audioCtx.createGain();
+        ng.gain.setValueAtTime(0.2, now);
+        ng.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+        noise.connect(ng);
+        ng.connect(audioCtx.destination);
+        noise.start(now);
+    } else if (type === 'miss') {
+        const osc = audioCtx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(100, now + 0.3);
+        gain.gain.setValueAtTime(0.12, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+        osc.connect(gain);
+        osc.start(now);
+        osc.stop(now + 0.3);
+    } else if (type === 'combo') {
+        [0, 0.08, 0.16].forEach((t, i) => {
+            const osc = audioCtx.createOscillator();
+            osc.type = 'sine';
+            const g = audioCtx.createGain();
+            osc.frequency.setValueAtTime(600 + i * 200, now + t);
+            g.gain.setValueAtTime(0.1, now + t);
+            g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.1);
+            osc.connect(g);
+            g.connect(audioCtx.destination);
+            osc.start(now + t);
+            osc.stop(now + t + 0.1);
+        });
+    } else if (type === 'gameover') {
+        [0, 0.15, 0.3].forEach((t, i) => {
+            const osc = audioCtx.createOscillator();
+            osc.type = 'sawtooth';
+            const g = audioCtx.createGain();
+            osc.frequency.setValueAtTime(300 - i * 80, now + t);
+            g.gain.setValueAtTime(0.15, now + t);
+            g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.25);
+            osc.connect(g);
+            g.connect(audioCtx.destination);
+            osc.start(now + t);
+            osc.stop(now + t + 0.25);
+        });
+    }
+}
+
+// --- Game State ---
+let state = 'menu'; // menu | playing | gameover
+let score = 0;
+let bestScore = parseInt(localStorage.getItem('gpuslicer_best') || '0');
+let lives = MAX_LIVES;
+let gpus = [];
+let slicedHalves = [];
+let particles = [];
+let sparks = [];
+let floatingTexts = [];
+let slashTrail = [];
+let mouseDown = false;
+let mouseX = 0, mouseY = 0;
+let lastSpawn = 0;
+let spawnInterval = GPU_SPAWN_INTERVAL_MAX;
+let combo = 0;
+let lastSliceTime = 0;
+let gameTime = 0;
+let screenShake = 0;
+let flashAlpha = 0;
+
+// --- Draw GPU ---
+function drawGPU(x, y, gpu, angle, scale) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.scale(scale, scale);
+
+    const w = gpu.w, h = gpu.h;
+    const hw = w / 2, hh = h / 2;
+
+    // PCB board
+    ctx.fillStyle = '#1a472a';
+    ctx.fillRect(-hw, -hh, w, h);
+
+    // Border
+    ctx.strokeStyle = gpu.accent;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-hw, -hh, w, h);
+
+    // Heatsink/fan area
+    ctx.fillStyle = gpu.accent;
+    ctx.fillRect(-hw + 5, -hh + 5, w - 10, h - 18);
+
+    // Fan circles
+    const fanRadius = Math.min(w, h) * 0.22;
+    const fanCount = w > 85 ? 3 : 2;
+    for (let i = 0; i < fanCount; i++) {
+        const fx = -hw + 5 + (w - 10) * (i + 0.5) / fanCount;
+        const fy = -hh + 5 + (h - 18) / 2;
+        ctx.beginPath();
+        ctx.arc(fx, fy, fanRadius, 0, Math.PI * 2);
+        ctx.fillStyle = '#111';
+        ctx.fill();
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        // Fan blades
+        const bladeAngle = (Date.now() / 200 + i) % (Math.PI * 2);
+        for (let b = 0; b < 5; b++) {
+            const ba = bladeAngle + (b * Math.PI * 2) / 5;
+            ctx.beginPath();
+            ctx.moveTo(fx, fy);
+            ctx.lineTo(fx + Math.cos(ba) * fanRadius * 0.85, fy + Math.sin(ba) * fanRadius * 0.85);
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+        // Center dot
+        ctx.beginPath();
+        ctx.arc(fx, fy, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#444';
+        ctx.fill();
+    }
+
+    // NVIDIA green accent stripe
+    ctx.fillStyle = gpu.color;
+    ctx.fillRect(-hw + 3, hh - 12, w - 6, 9);
+
+    // PCI-E connector
+    ctx.fillStyle = '#C8A200';
+    for (let i = 0; i < 8; i++) {
+        ctx.fillRect(-hw + 8 + i * 7, hh - 2, 4, 2);
+    }
+
+    // Tier glow
+    const glowColor = TIER_GLOW[gpu.tier];
+    ctx.shadowColor = glowColor;
+    ctx.shadowBlur = 12;
+    ctx.strokeStyle = glowColor;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(-hw - 1, -hh - 1, w + 2, h + 2);
+    ctx.shadowBlur = 0;
+
+    // Name label
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(gpu.name, 0, hh - 14);
+
+    ctx.restore();
+}
+
+function drawGPUHalf(x, y, gpu, angle, scale, isTop) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.scale(scale, scale);
+
+    const w = gpu.w, h = gpu.h;
+    const hw = w / 2, hh = h / 2;
+
+    ctx.beginPath();
+    if (isTop) {
+        ctx.rect(-hw - 5, -hh - 5, w + 10, hh + 5);
+    } else {
+        ctx.rect(-hw - 5, 0, w + 10, hh + 5);
+    }
+    ctx.clip();
+
+    // PCB
+    ctx.fillStyle = '#1a472a';
+    ctx.fillRect(-hw, -hh, w, h);
+    ctx.strokeStyle = gpu.accent;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-hw, -hh, w, h);
+
+    // Sliced edge spark effect
+    ctx.fillStyle = '#FFD700';
+    ctx.shadowColor = '#FFD700';
+    ctx.shadowBlur = 8;
+    ctx.fillRect(-hw, isTop ? -1 : 0, w, 2);
+    ctx.shadowBlur = 0;
+
+    // Heatsink
+    ctx.fillStyle = gpu.accent;
+    ctx.fillRect(-hw + 5, -hh + 5, w - 10, h - 18);
+
+    // Fan (simplified for halves)
+    const fanRadius = Math.min(w, h) * 0.22;
+    const fanCount = w > 85 ? 3 : 2;
+    for (let i = 0; i < fanCount; i++) {
+        const fx = -hw + 5 + (w - 10) * (i + 0.5) / fanCount;
+        const fy = -hh + 5 + (h - 18) / 2;
+        ctx.beginPath();
+        ctx.arc(fx, fy, fanRadius, 0, Math.PI * 2);
+        ctx.fillStyle = '#111';
+        ctx.fill();
+    }
+
+    // Green stripe
+    ctx.fillStyle = gpu.color;
+    ctx.fillRect(-hw + 3, hh - 12, w - 6, 9);
+
+    ctx.restore();
+}
+
+// --- Draw Bomb ---
+function drawBomb(x, y, scale) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+
+    // Body
+    ctx.beginPath();
+    ctx.arc(0, 0, 22, 0, Math.PI * 2);
+    ctx.fillStyle = '#222';
+    ctx.fill();
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Skull/warning
+    ctx.fillStyle = '#FF4444';
+    ctx.font = 'bold 18px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('X', 0, 0);
+
+    // Fuse
+    ctx.beginPath();
+    ctx.moveTo(10, -18);
+    ctx.quadraticCurveTo(18, -28, 14, -34);
+    ctx.strokeStyle = '#8B4513';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Fuse spark
+    const sparkSize = 3 + Math.sin(Date.now() / 80) * 2;
+    ctx.beginPath();
+    ctx.arc(14, -34, sparkSize, 0, Math.PI * 2);
+    ctx.fillStyle = `hsl(${30 + Math.random() * 30}, 100%, ${50 + Math.random() * 30}%)`;
+    ctx.fill();
+
+    ctx.restore();
+}
+
+// --- Particles ---
+function spawnSliceParticles(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 2 + Math.random() * 5;
+        particles.push({
+            x, y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 2,
+            life: 1,
+            decay: 0.015 + Math.random() * 0.02,
+            size: 2 + Math.random() * 4,
+            color,
+        });
+    }
+}
+
+function spawnSparks(x, y, count) {
+    for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 3 + Math.random() * 8;
+        sparks.push({
+            x, y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 3,
+            life: 1,
+            decay: 0.03 + Math.random() * 0.03,
+            size: 1 + Math.random() * 2,
+        });
+    }
+}
+
+function spawnFloatingText(x, y, text, color, size) {
+    floatingTexts.push({ x, y, text, color, size: size || 24, life: 1, vy: -2 });
+}
+
+// --- Spawn GPU ---
+function spawnGPU() {
+    const isBomb = Math.random() < BOMB_CHANCE;
+    const gpu = isBomb ? null : GPU_MODELS[Math.floor(Math.random() * GPU_MODELS.length)];
+    const w = canvas.width;
+    const h = canvas.height;
+    const x = 80 + Math.random() * (w - 160);
+    const vx = (w / 2 - x) * 0.01 + (Math.random() - 0.5) * 4;
+    const vy = -(10 + Math.random() * 5) - (h / 800) * 3;
+
+    gpus.push({
+        x, y: h + 50,
+        vx, vy,
+        angle: (Math.random() - 0.5) * 0.5,
+        angularVel: (Math.random() - 0.5) * 0.08,
+        gpu,
+        isBomb,
+        sliced: false,
+        scale: 1,
+        missed: false,
+    });
+}
+
+// --- Check Slash Collision ---
+function lineIntersectsRect(x1, y1, x2, y2, rx, ry, rw, rh) {
+    // Simple distance-to-center check for slash
+    const cx = rx, cy = ry;
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 1) return false;
+    const t = Math.max(0, Math.min(1, ((cx - x1) * dx + (cy - y1) * dy) / (len * len)));
+    const closestX = x1 + t * dx;
+    const closestY = y1 + t * dy;
+    const dist = Math.sqrt((closestX - cx) ** 2 + (closestY - cy) ** 2);
+    return dist < (rw + rh) / 3;
+}
+
+// --- Slash Logic ---
+function checkSlash() {
+    if (slashTrail.length < 2) return;
+    const p1 = slashTrail[slashTrail.length - 2];
+    const p2 = slashTrail[slashTrail.length - 1];
+    const dx = p2.x - p1.x, dy = p2.y - p1.y;
+    const speed = Math.sqrt(dx * dx + dy * dy);
+    if (speed < 5) return;
+
+    for (const g of gpus) {
+        if (g.sliced) continue;
+        const hitW = g.isBomb ? 44 : g.gpu.w;
+        const hitH = g.isBomb ? 44 : g.gpu.h;
+        if (lineIntersectsRect(p1.x, p1.y, p2.x, p2.y, g.x, g.y, hitW, hitH)) {
+            g.sliced = true;
+            if (g.isBomb) {
+                // Hit bomb — lose a life
+                lives--;
+                screenShake = 15;
+                flashAlpha = 0.6;
+                playSound('bomb');
+                spawnSliceParticles(g.x, g.y, '#FF4444', 30);
+                spawnSparks(g.x, g.y, 20);
+                spawnFloatingText(g.x, g.y, 'BOOM!', '#FF4444', 32);
+                if (lives <= 0) {
+                    endGame();
+                }
+            } else {
+                // Slice GPU
+                const now = Date.now();
+                if (now - lastSliceTime < COMBO_TIME) {
+                    combo++;
+                    if (combo >= 3) {
+                        playSound('combo');
+                    }
+                } else {
+                    combo = 1;
+                }
+                lastSliceTime = now;
+
+                const multiplier = combo >= 3 ? combo : 1;
+                const points = g.gpu.points * multiplier;
+                score += points;
+
+                playSound('slice');
+                spawnSliceParticles(g.x, g.y, g.gpu.color, 15);
+                spawnSliceParticles(g.x, g.y, '#00FF00', 8);
+                spawnSparks(g.x, g.y, 12);
+
+                let text = `+${points}`;
+                if (combo >= 3) text += ` x${combo}`;
+                spawnFloatingText(g.x, g.y - 20, text, TIER_GLOW[g.gpu.tier], combo >= 3 ? 30 : 24);
+                if (combo >= 3) {
+                    spawnFloatingText(g.x, g.y + 10, 'COMBO!', '#FFD700', 20);
+                }
+
+                // Spawn halves
+                const sliceAngle = Math.atan2(dy, dx);
+                slicedHalves.push({
+                    x: g.x, y: g.y,
+                    vx: g.vx - 2, vy: g.vy - 1,
+                    angle: g.angle, angularVel: g.angularVel - 0.05,
+                    gpu: g.gpu, isTop: true, scale: g.scale, life: 1,
+                });
+                slicedHalves.push({
+                    x: g.x, y: g.y,
+                    vx: g.vx + 2, vy: g.vy - 1,
+                    angle: g.angle, angularVel: g.angularVel + 0.05,
+                    gpu: g.gpu, isTop: false, scale: g.scale, life: 1,
+                });
+            }
+        }
+    }
+}
+
+function endGame() {
+    state = 'gameover';
+    playSound('gameover');
+    if (score > bestScore) {
+        bestScore = score;
+        localStorage.setItem('gpuslicer_best', bestScore.toString());
+    }
+}
+
+// --- Update ---
+function update(dt) {
+    if (state !== 'playing') return;
+
+    gameTime += dt;
+
+    // Difficulty ramp
+    spawnInterval = Math.max(300, GPU_SPAWN_INTERVAL_MAX - gameTime * 0.5);
+
+    // Spawn
+    const now = Date.now();
+    if (now - lastSpawn > spawnInterval) {
+        lastSpawn = now;
+        spawnGPU();
+        // Occasionally spawn a cluster
+        if (Math.random() < 0.25) {
+            setTimeout(() => { if (state === 'playing') spawnGPU(); }, 100);
+            setTimeout(() => { if (state === 'playing') spawnGPU(); }, 200);
+        }
+    }
+
+    // Update GPUs
+    for (const g of gpus) {
+        g.x += g.vx;
+        g.y += g.vy;
+        g.vy += GRAVITY;
+        g.angle += g.angularVel;
+
+        // Missed GPU (fell below screen)
+        if (!g.sliced && !g.isBomb && g.y > canvas.height + 80 && !g.missed) {
+            g.missed = true;
+            lives--;
+            playSound('miss');
+            spawnFloatingText(g.x, canvas.height - 30, 'MISSED!', '#FF6666', 20);
+            if (lives <= 0) {
+                endGame();
+            }
+        }
+    }
+    gpus = gpus.filter(g => g.y < canvas.height + 150);
+
+    // Update halves
+    for (const h of slicedHalves) {
+        h.x += h.vx;
+        h.y += h.vy;
+        h.vy += GRAVITY;
+        h.angle += h.angularVel;
+        h.life -= 0.008;
+    }
+    slicedHalves = slicedHalves.filter(h => h.life > 0 && h.y < canvas.height + 100);
+
+    // Update particles
+    for (const p of particles) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.1;
+        p.life -= p.decay;
+    }
+    particles = particles.filter(p => p.life > 0);
+
+    // Update sparks
+    for (const s of sparks) {
+        s.x += s.vx;
+        s.y += s.vy;
+        s.vy += 0.15;
+        s.vx *= 0.98;
+        s.life -= s.decay;
+    }
+    sparks = sparks.filter(s => s.life > 0);
+
+    // Update floating texts
+    for (const ft of floatingTexts) {
+        ft.y += ft.vy;
+        ft.life -= 0.015;
+    }
+    floatingTexts = floatingTexts.filter(ft => ft.life > 0);
+
+    // Screen shake decay
+    if (screenShake > 0) screenShake *= 0.9;
+    if (screenShake < 0.5) screenShake = 0;
+
+    // Flash decay
+    if (flashAlpha > 0) flashAlpha *= 0.92;
+}
+
+// --- Draw background ---
+function drawBackground() {
+    // Dark gradient
+    const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    grad.addColorStop(0, '#0a0a0f');
+    grad.addColorStop(0.5, '#0f1218');
+    grad.addColorStop(1, '#1a1a2e');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Subtle grid
+    ctx.strokeStyle = 'rgba(118, 185, 0, 0.03)';
+    ctx.lineWidth = 1;
+    const gridSize = 60;
+    for (let x = 0; x < canvas.width; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+    }
+    for (let y = 0; y < canvas.height; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+    }
+}
+
+// --- Draw Slash Trail ---
+function drawSlashTrail() {
+    if (slashTrail.length < 2) return;
+    for (let i = 1; i < slashTrail.length; i++) {
+        const alpha = i / slashTrail.length;
+        const width = alpha * 6;
+        ctx.beginPath();
+        ctx.moveTo(slashTrail[i - 1].x, slashTrail[i - 1].y);
+        ctx.lineTo(slashTrail[i].x, slashTrail[i].y);
+        ctx.strokeStyle = `rgba(118, 185, 0, ${alpha * 0.8})`;
+        ctx.lineWidth = width;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // Glow
+        ctx.strokeStyle = `rgba(118, 185, 0, ${alpha * 0.3})`;
+        ctx.lineWidth = width * 3;
+        ctx.stroke();
+    }
+}
+
+// --- Draw HUD ---
+function drawHUD() {
+    const w = canvas.width;
+
+    // Score
+    ctx.fillStyle = '#76B900';
+    ctx.font = 'bold 36px monospace';
+    ctx.textAlign = 'left';
+    ctx.shadowColor = '#76B900';
+    ctx.shadowBlur = 10;
+    ctx.fillText(score.toString(), 20, 45);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#888';
+    ctx.font = '14px monospace';
+    ctx.fillText('SCORE', 20, 62);
+
+    // Best
+    ctx.fillStyle = '#FFD700';
+    ctx.font = '16px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(`BEST: ${bestScore}`, 20, 85);
+
+    // Lives (GPU icons)
+    ctx.textAlign = 'right';
+    for (let i = 0; i < MAX_LIVES; i++) {
+        const lx = w - 30 - i * 35;
+        const ly = 35;
+        if (i < lives) {
+            ctx.fillStyle = '#76B900';
+            ctx.shadowColor = '#76B900';
+            ctx.shadowBlur = 8;
+            ctx.fillRect(lx - 12, ly - 8, 24, 16);
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#222';
+            ctx.fillRect(lx - 9, ly - 5, 18, 10);
+            ctx.fillStyle = '#76B900';
+            ctx.fillRect(lx - 10, ly + 4, 20, 3);
+        } else {
+            ctx.fillStyle = '#333';
+            ctx.fillRect(lx - 12, ly - 8, 24, 16);
+            ctx.strokeStyle = '#555';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(lx - 12, ly - 8, 24, 16);
+            // X mark
+            ctx.strokeStyle = '#FF4444';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(lx - 6, ly - 4);
+            ctx.lineTo(lx + 6, ly + 4);
+            ctx.moveTo(lx + 6, ly - 4);
+            ctx.lineTo(lx - 6, ly + 4);
+            ctx.stroke();
+        }
+    }
+
+    // Combo indicator
+    if (combo >= 3 && Date.now() - lastSliceTime < COMBO_TIME + 500) {
+        ctx.fillStyle = '#FFD700';
+        ctx.font = `bold ${20 + combo * 2}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.shadowColor = '#FFD700';
+        ctx.shadowBlur = 15;
+        ctx.fillText(`${combo}x COMBO!`, w / 2, 50);
+        ctx.shadowBlur = 0;
+    }
+}
+
+// --- Draw Menu ---
+function drawMenu() {
+    drawBackground();
+
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+
+    // Title
+    ctx.fillStyle = '#76B900';
+    ctx.font = 'bold 60px monospace';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#76B900';
+    ctx.shadowBlur = 20;
+    ctx.fillText('GPU SLICER', cx, cy - 100);
+    ctx.shadowBlur = 0;
+
+    // Subtitle
+    ctx.fillStyle = '#888';
+    ctx.font = '18px monospace';
+    ctx.fillText('Slice NVIDIA GPUs like a pro', cx, cy - 60);
+
+    // Animated GPU on menu
+    const menuGPU = GPU_MODELS[0];
+    const bobY = Math.sin(Date.now() / 500) * 10;
+    const bobAngle = Math.sin(Date.now() / 700) * 0.1;
+    drawGPU(cx, cy + 10 + bobY, menuGPU, bobAngle, 1.5);
+
+    // Instructions
+    ctx.fillStyle = '#76B900';
+    ctx.font = 'bold 22px monospace';
+    ctx.fillText('Click & Slash to Play!', cx, cy + 100);
+
+    ctx.fillStyle = '#666';
+    ctx.font = '14px monospace';
+    ctx.fillText('Swipe through GPUs to slice them', cx, cy + 130);
+    ctx.fillText('Avoid the bombs!', cx, cy + 150);
+
+    // Best score
+    if (bestScore > 0) {
+        ctx.fillStyle = '#FFD700';
+        ctx.font = '16px monospace';
+        ctx.fillText(`Best Score: ${bestScore}`, cx, cy + 190);
+    }
+
+    // Cursor
+    drawCursor();
+}
+
+// --- Draw Game Over ---
+function drawGameOver() {
+    drawBackground();
+
+    // Dim overlay
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+
+    ctx.fillStyle = '#FF4444';
+    ctx.font = 'bold 50px monospace';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#FF4444';
+    ctx.shadowBlur = 20;
+    ctx.fillText('GAME OVER', cx, cy - 60);
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = '#76B900';
+    ctx.font = 'bold 36px monospace';
+    ctx.fillText(`Score: ${score}`, cx, cy);
+
+    if (score >= bestScore && score > 0) {
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 22px monospace';
+        ctx.fillText('NEW BEST!', cx, cy + 40);
+    }
+
+    ctx.fillStyle = '#888';
+    ctx.font = '18px monospace';
+    ctx.fillText(`Best: ${bestScore}`, cx, cy + 75);
+
+    ctx.fillStyle = '#76B900';
+    ctx.font = 'bold 20px monospace';
+    const pulse = 0.7 + Math.sin(Date.now() / 400) * 0.3;
+    ctx.globalAlpha = pulse;
+    ctx.fillText('Click to Play Again', cx, cy + 130);
+    ctx.globalAlpha = 1;
+
+    drawCursor();
+}
+
+// --- Draw Cursor ---
+function drawCursor() {
+    // Crosshair cursor
+    const r = 12;
+    ctx.strokeStyle = '#76B900';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = '#76B900';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.arc(mouseX, mouseY, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(mouseX - r - 4, mouseY);
+    ctx.lineTo(mouseX - r + 6, mouseY);
+    ctx.moveTo(mouseX + r - 6, mouseY);
+    ctx.lineTo(mouseX + r + 4, mouseY);
+    ctx.moveTo(mouseX, mouseY - r - 4);
+    ctx.lineTo(mouseX, mouseY - r + 6);
+    ctx.moveTo(mouseX, mouseY + r - 6);
+    ctx.lineTo(mouseX, mouseY + r + 4);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+}
+
+// --- Main Draw ---
+function draw() {
+    if (state === 'menu') {
+        drawMenu();
+        return;
+    }
+    if (state === 'gameover') {
+        drawGameOver();
+        return;
+    }
+
+    // Playing state
+    ctx.save();
+
+    // Screen shake
+    if (screenShake > 0) {
+        ctx.translate(
+            (Math.random() - 0.5) * screenShake * 2,
+            (Math.random() - 0.5) * screenShake * 2
+        );
+    }
+
+    drawBackground();
+
+    // Draw sliced halves
+    for (const h of slicedHalves) {
+        ctx.globalAlpha = h.life;
+        drawGPUHalf(h.x, h.y, h.gpu, h.angle, h.scale, h.isTop);
+    }
+    ctx.globalAlpha = 1;
+
+    // Draw GPUs & bombs
+    for (const g of gpus) {
+        if (g.sliced) continue;
+        if (g.isBomb) {
+            drawBomb(g.x, g.y, g.scale);
+        } else {
+            drawGPU(g.x, g.y, g.gpu, g.angle, g.scale);
+        }
+    }
+
+    // Particles
+    for (const p of particles) {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+
+    // Sparks
+    for (const s of sparks) {
+        ctx.globalAlpha = s.life;
+        ctx.fillStyle = `hsl(${50 + Math.random() * 20}, 100%, ${60 + Math.random() * 30}%)`;
+        ctx.shadowColor = '#FFD700';
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+    ctx.globalAlpha = 1;
+
+    // Floating texts
+    for (const ft of floatingTexts) {
+        ctx.globalAlpha = ft.life;
+        ctx.fillStyle = ft.color;
+        ctx.font = `bold ${ft.size}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.shadowColor = ft.color;
+        ctx.shadowBlur = 10;
+        ctx.fillText(ft.text, ft.x, ft.y);
+        ctx.shadowBlur = 0;
+    }
+    ctx.globalAlpha = 1;
+
+    // Slash trail
+    drawSlashTrail();
+
+    // Red flash (bomb hit)
+    if (flashAlpha > 0.01) {
+        ctx.fillStyle = `rgba(255, 0, 0, ${flashAlpha})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    ctx.restore();
+
+    drawHUD();
+    drawCursor();
+}
+
+// --- Game Loop ---
+let lastTime = 0;
+function gameLoop(timestamp) {
+    const dt = Math.min(timestamp - lastTime, 50);
+    lastTime = timestamp;
+
+    update(dt);
+    draw();
+
+    // Trim slash trail
+    if (!mouseDown) {
+        if (slashTrail.length > 0) {
+            slashTrail.splice(0, 2);
+        }
+    } else {
+        while (slashTrail.length > SLASH_TRAIL_LENGTH) {
+            slashTrail.shift();
+        }
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+// --- Input ---
+function startGame() {
+    state = 'playing';
+    score = 0;
+    lives = MAX_LIVES;
+    gpus = [];
+    slicedHalves = [];
+    particles = [];
+    sparks = [];
+    floatingTexts = [];
+    slashTrail = [];
+    combo = 0;
+    gameTime = 0;
+    lastSpawn = Date.now();
+    screenShake = 0;
+    flashAlpha = 0;
+}
+
+canvas.addEventListener('mousedown', (e) => {
+    mouseDown = true;
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+    slashTrail = [{ x: mouseX, y: mouseY }];
+
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    if (state === 'menu' || state === 'gameover') {
+        startGame();
+    }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+    if (mouseDown && state === 'playing') {
+        slashTrail.push({ x: mouseX, y: mouseY });
+        checkSlash();
+    }
+});
+
+canvas.addEventListener('mouseup', () => {
+    mouseDown = false;
+});
+
+canvas.addEventListener('mouseleave', () => {
+    mouseDown = false;
+});
+
+// Touch support
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    mouseDown = true;
+    const t = e.touches[0];
+    mouseX = t.clientX;
+    mouseY = t.clientY;
+    slashTrail = [{ x: mouseX, y: mouseY }];
+
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    if (state === 'menu' || state === 'gameover') {
+        startGame();
+    }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const t = e.touches[0];
+    mouseX = t.clientX;
+    mouseY = t.clientY;
+    if (mouseDown && state === 'playing') {
+        slashTrail.push({ x: mouseX, y: mouseY });
+        checkSlash();
+    }
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    mouseDown = false;
+});
+
+// --- Start ---
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
