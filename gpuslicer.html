@@ -209,6 +209,76 @@ let nameInputActive = false;
 let leaderboardBtnHover = false;
 let backBtnHover = false;
 let gameoverHandled = false;
+let hoveredKey = null;
+
+// --- On-screen keyboard layout ---
+const KB_ROWS = [
+    ['Q','W','E','R','T','Y','U','I','O','P'],
+    ['A','S','D','F','G','H','J','K','L'],
+    ['Z','X','C','V','B','N','M','DEL'],
+    ['SPACE', 'GO'],
+];
+
+function getKeyboardLayout() {
+    const w = canvas.width;
+    const h = canvas.height;
+    const kbW = Math.min(w - 20, 520);
+    const keyGap = 4;
+    const keyH = Math.min(48, (h * 0.35) / KB_ROWS.length - keyGap);
+    const totalKbH = KB_ROWS.length * (keyH + keyGap);
+    const kbY = h - totalKbH - 15;
+    const kbX = (w - kbW) / 2;
+
+    const keys = [];
+    for (let r = 0; r < KB_ROWS.length; r++) {
+        const row = KB_ROWS[r];
+        const rowY = kbY + r * (keyH + keyGap);
+        // Calculate key widths
+        let specialCount = 0;
+        let normalCount = 0;
+        for (const k of row) {
+            if (k === 'SPACE') specialCount += 4;
+            else if (k === 'DEL' || k === 'GO') specialCount += 1.5;
+            else normalCount++;
+        }
+        const totalUnits = normalCount + specialCount;
+        const keyW = (kbW - (row.length - 1) * keyGap) / totalUnits;
+        let curX = kbX;
+        for (const k of row) {
+            let w;
+            if (k === 'SPACE') w = keyW * 4;
+            else if (k === 'DEL' || k === 'GO') w = keyW * 1.5;
+            else w = keyW;
+            keys.push({ label: k, x: curX, y: rowY, w, h: keyH });
+            curX += w + keyGap;
+        }
+    }
+    return keys;
+}
+
+function handleKeyboardTap(tx, ty) {
+    if (state !== 'enterName') return false;
+    const keys = getKeyboardLayout();
+    for (const k of keys) {
+        if (isInRect(tx, ty, k.x, k.y, k.w, k.h)) {
+            if (k.label === 'DEL') {
+                playerName = playerName.slice(0, -1);
+            } else if (k.label === 'GO') {
+                if (playerName.trim().length > 0) {
+                    nameInputActive = false;
+                    startGame();
+                }
+            } else if (k.label === 'SPACE') {
+                if (playerName.length < 12) playerName += ' ';
+            } else {
+                if (playerName.length < 12) playerName += k.label;
+            }
+            playSound('slice');
+            return true;
+        }
+    }
+    return false;
+}
 
 // --- Name Input Handling ---
 function setupNameInput() {
@@ -225,7 +295,7 @@ window.addEventListener('keydown', (e) => {
             nameInputActive = false;
             startGame();
         } else if (e.key.length === 1 && playerName.length < 12) {
-            playerName += e.key;
+            playerName += e.key.toUpperCase();
         }
         e.preventDefault();
     }
@@ -833,40 +903,93 @@ function drawEnterName() {
     drawBackground();
 
     const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
+    const keys = getKeyboardLayout();
+    // Position title and input box above keyboard
+    const kbTop = keys.length > 0 ? keys[0].y : canvas.height * 0.55;
+    const titleY = Math.min(kbTop - 160, canvas.height * 0.2);
 
     ctx.fillStyle = '#76B900';
-    ctx.font = 'bold 40px monospace';
+    ctx.font = 'bold 36px monospace';
     ctx.textAlign = 'center';
     ctx.shadowColor = '#76B900';
     ctx.shadowBlur = 15;
-    ctx.fillText('ENTER YOUR NAME', cx, cy - 80);
+    ctx.fillText('ENTER YOUR NAME', cx, titleY);
     ctx.shadowBlur = 0;
 
     // Input box
-    const boxW = 300, boxH = 50;
+    const boxW = Math.min(340, canvas.width - 40), boxH = 50;
+    const boxY = titleY + 25;
     ctx.fillStyle = '#1a1a2e';
     ctx.strokeStyle = '#76B900';
     ctx.lineWidth = 2;
-    ctx.fillRect(cx - boxW / 2, cy - boxH / 2, boxW, boxH);
-    ctx.strokeRect(cx - boxW / 2, cy - boxH / 2, boxW, boxH);
+    ctx.fillRect(cx - boxW / 2, boxY, boxW, boxH);
+    ctx.strokeRect(cx - boxW / 2, boxY, boxW, boxH);
 
-    // Name text
+    // Name text with cursor
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 28px monospace';
+    ctx.font = 'bold 26px monospace';
     const displayName = playerName + (Math.floor(Date.now() / 500) % 2 === 0 ? '_' : '');
-    ctx.fillText(displayName, cx, cy + 10);
+    ctx.fillText(displayName || '_', cx, boxY + boxH / 2 + 9);
 
     // Hint
-    ctx.fillStyle = '#666';
-    ctx.font = '16px monospace';
-    ctx.fillText('Type your name and press ENTER', cx, cy + 60);
-
     if (playerName.length === 0) {
         ctx.fillStyle = '#555';
         ctx.font = '14px monospace';
-        ctx.fillText('(max 12 characters)', cx, cy + 85);
+        ctx.fillText('(max 12 characters)', cx, boxY + boxH + 22);
     }
+
+    // Draw on-screen keyboard
+    const hk = hoveredKey;
+    for (const k of keys) {
+        const isHover = hk && hk.label === k.label;
+        const isGo = k.label === 'GO';
+        const isDel = k.label === 'DEL';
+
+        // Key background
+        if (isGo) {
+            ctx.fillStyle = isHover ? '#76B900' : (playerName.trim().length > 0 ? '#3a5f00' : '#1a1a1a');
+        } else if (isDel) {
+            ctx.fillStyle = isHover ? '#AA3333' : '#331111';
+        } else {
+            ctx.fillStyle = isHover ? '#444' : '#222';
+        }
+
+        // Rounded key
+        const kr = 6;
+        ctx.beginPath();
+        ctx.moveTo(k.x + kr, k.y);
+        ctx.lineTo(k.x + k.w - kr, k.y);
+        ctx.quadraticCurveTo(k.x + k.w, k.y, k.x + k.w, k.y + kr);
+        ctx.lineTo(k.x + k.w, k.y + k.h - kr);
+        ctx.quadraticCurveTo(k.x + k.w, k.y + k.h, k.x + k.w - kr, k.y + k.h);
+        ctx.lineTo(k.x + kr, k.y + k.h);
+        ctx.quadraticCurveTo(k.x, k.y + k.h, k.x, k.y + k.h - kr);
+        ctx.lineTo(k.x, k.y + kr);
+        ctx.quadraticCurveTo(k.x, k.y, k.x + kr, k.y);
+        ctx.closePath();
+        ctx.fill();
+
+        // Key border
+        ctx.strokeStyle = isGo ? '#76B900' : isDel ? '#FF4444' : '#555';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Key label
+        if (isGo) {
+            ctx.fillStyle = playerName.trim().length > 0 ? '#76B900' : '#555';
+        } else if (isDel) {
+            ctx.fillStyle = '#FF6666';
+        } else {
+            ctx.fillStyle = '#ccc';
+        }
+        const fontSize = (k.label === 'SPACE' || k.label === 'GO' || k.label === 'DEL') ? 14 : 18;
+        ctx.font = `bold ${fontSize}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const display = k.label === 'SPACE' ? '___' : k.label === 'DEL' ? '<-' : k.label;
+        ctx.fillText(display, k.x + k.w / 2, k.y + k.h / 2);
+    }
+    ctx.textBaseline = 'alphabetic';
 
     drawCursor();
 }
@@ -1153,6 +1276,12 @@ canvas.addEventListener('mousedown', (e) => {
     mouseY = e.clientY;
     slashTrail = [{ x: mouseX, y: mouseY }];
 
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    if (state === 'enterName') {
+        handleKeyboardTap(e.clientX, e.clientY);
+        return;
+    }
     if (state !== 'playing') {
         handleClick(e.clientX, e.clientY);
     }
@@ -1161,6 +1290,17 @@ canvas.addEventListener('mousedown', (e) => {
 canvas.addEventListener('mousemove', (e) => {
     mouseX = e.clientX;
     mouseY = e.clientY;
+    // Update hovered key for visual feedback
+    if (state === 'enterName') {
+        hoveredKey = null;
+        const keys = getKeyboardLayout();
+        for (const k of keys) {
+            if (isInRect(e.clientX, e.clientY, k.x, k.y, k.w, k.h)) {
+                hoveredKey = k;
+                break;
+            }
+        }
+    }
     if (mouseDown && state === 'playing') {
         slashTrail.push({ x: mouseX, y: mouseY });
         checkSlash();
@@ -1184,6 +1324,12 @@ canvas.addEventListener('touchstart', (e) => {
     mouseY = t.clientY;
     slashTrail = [{ x: mouseX, y: mouseY }];
 
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    if (state === 'enterName') {
+        handleKeyboardTap(t.clientX, t.clientY);
+        return;
+    }
     if (state !== 'playing') {
         handleClick(t.clientX, t.clientY);
     }
