@@ -302,7 +302,7 @@ function createPlayer() {
     angle: 0, speed: CFG.PLAYER_SPEED,
     fireCooldown: 0, reloading: 0,
     invincibleTimer: 0, animTimer: 0, animFrame: 0,
-    radius: 12,
+    radius: 12, vx: 0, vy: 0,
   };
 }
 
@@ -317,10 +317,13 @@ function updatePlayer(dt) {
   // Normalize diagonal
   if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; }
 
+  const ox = p.x, oy = p.y;
   p.x += dx * p.speed * dt;
   p.y += dy * p.speed * dt;
   p.x = Math.max(16, Math.min(CFG.W - 16, p.x));
   p.y = Math.max(16, Math.min(CFG.H - 16, p.y));
+  // Actual velocity after clamping (Runners use it to predict where you'll be)
+  if (dt > 0) { p.vx = (p.x - ox) / dt; p.vy = (p.y - oy) / dt; }
 
   // Animation
   if (dx !== 0 || dy !== 0) {
@@ -469,13 +472,14 @@ function checkCollisions() {
     if (!b.fromPlayer) continue;
     for (let ei = enemies.length - 1; ei >= 0; ei--) {
       const e = enemies[ei];
+      if (e.spawnTimer > 0) continue; // still announcing: untouchable
       if (circlesCollide(b.x, b.y, b.radius, e.x, e.y, e.radius)) {
         e.hp -= b.damage;
         e.flashTimer = 0.1;
-        // Knockback
+        // Knockback, scaled by mass
         const angle = Math.atan2(e.y - b.y, e.x - b.x);
-        e.x += Math.cos(angle) * 5;
-        e.y += Math.sin(angle) * 5;
+        e.x += Math.cos(angle) * e.knockback;
+        e.y += Math.sin(angle) * e.knockback;
         spawnParticles(b.x, b.y, 5, e.color, 1.5);
         bullets.splice(bi, 1);
         if (e.hp <= 0) {
@@ -498,6 +502,7 @@ function checkCollisions() {
 
   // Enemy body vs player
   for (const e of enemies) {
+    if (e.spawnTimer > 0) continue;
     if (circlesCollide(e.x, e.y, e.radius, player.x, player.y, player.radius)) {
       damagePlayer(e.contactDamage);
     }
@@ -510,13 +515,16 @@ function checkCollisions() {
 let enemies = [];
 
 const ENEMY_DEFS = {
-  walker: { hp: 30, speed: 70, radius: 14, color: '#e94560', contactDamage: 10, score: 100, sprite: WALKER_SPRITE, spriteScale: 2.2 },
-  runner: { hp: 15, speed: 160, radius: 10, color: '#6bcb77', contactDamage: 8, score: 150, sprite: RUNNER_SPRITE, spriteScale: 2 },
-  tank:   { hp: 120, speed: 40, radius: 18, color: '#9b59b6', contactDamage: 20, score: 300, sprite: TANK_SPRITE, spriteScale: 2 },
-  boss:   { hp: 500, speed: 50, radius: 30, color: '#f39c12', contactDamage: 25, score: 2000, sprite: BOSS_SPRITE, spriteScale: 2.2 },
+  walker: { hp: 30, speed: 70, radius: 14, color: '#e94560', contactDamage: 10, score: 100, knockback: 5, sprite: WALKER_SPRITE, spriteScale: 2.2 },
+  runner: { hp: 15, speed: 160, radius: 10, color: '#6bcb77', contactDamage: 8, score: 150, knockback: 5, sprite: RUNNER_SPRITE, spriteScale: 2 },
+  tank:   { hp: 120, speed: 40, radius: 18, color: '#9b59b6', contactDamage: 20, score: 300, knockback: 1, sprite: TANK_SPRITE, spriteScale: 2 },
+  boss:   { hp: 500, speed: 50, radius: 30, color: '#f39c12', contactDamage: 25, score: 2000, knockback: 0, sprite: BOSS_SPRITE, spriteScale: 2.2 },
 };
 
-function spawnEnemy(type) {
+const SPAWN_WARNING = 0.6;  // seconds an arrival is announced before it becomes active
+const RUNNER_CHARGE = { range: 200, windup: 0.4, lead: 0.8, speed: 320, duration: 0.6, cooldown: 2.0, firstCooldown: 1.5 };
+
+function spawnEnemy(type, summoned = false) {
   const def = ENEMY_DEFS[type];
   // Spawn from random edge
   let x, y;
@@ -525,6 +533,9 @@ function spawnEnemy(type) {
   else if (side === 1) { x = CFG.W + 20; y = Math.random() * CFG.H; }
   else if (side === 2) { x = Math.random() * CFG.W; y = -20; }
   else { x = Math.random() * CFG.W; y = CFG.H + 20; }
+  // Final entry position, inside the arena, shown by the arrival warning
+  x = Math.max(def.radius, Math.min(CFG.W - def.radius, x));
+  y = Math.max(def.radius, Math.min(CFG.H - def.radius, y));
 
   const bossHp = type === 'boss' ? (currentLevel >= 9 ? 800 : 500) : def.hp;
 
@@ -535,7 +546,10 @@ function spawnEnemy(type) {
     radius: def.radius,
     color: def.color,
     contactDamage: def.contactDamage,
-    score: def.score,
+    score: summoned ? 0 : def.score, // boss summons give no points: no farming
+    knockback: def.knockback,
+    spawnTimer: SPAWN_WARNING,
+    charge: null, chargeT: 0, chargeAngle: 0, chargeCd: RUNNER_CHARGE.firstCooldown,
     type,
     sprite: def.sprite,
     spriteScale: def.spriteScale,
@@ -549,7 +563,9 @@ function spawnEnemy(type) {
 }
 
 function updateEnemies(dt) {
-  for (const e of enemies) {
+  // Snapshot: enemies summoned this frame start updating next frame
+  for (const e of enemies.slice()) {
+    if (e.spawnTimer > 0) { e.spawnTimer -= dt; continue; }
     e.flashTimer = Math.max(0, e.flashTimer - dt);
     const angle = Math.atan2(player.y - e.y, player.x - e.x);
 
@@ -557,11 +573,33 @@ function updateEnemies(dt) {
       e.x += Math.cos(angle) * e.speed * dt;
       e.y += Math.sin(angle) * e.speed * dt;
     } else if (e.type === 'runner') {
-      e.zigzagTimer += dt;
-      if (e.zigzagTimer > 0.3) { e.zigzagTimer = 0; e.zigzagDir *= -1; }
-      const perpAngle = angle + Math.PI / 2 * e.zigzagDir;
-      e.x += (Math.cos(angle) * 0.7 + Math.cos(perpAngle) * 0.5) * e.speed * dt;
-      e.y += (Math.sin(angle) * 0.7 + Math.sin(perpAngle) * 0.5) * e.speed * dt;
+      const rc = RUNNER_CHARGE;
+      if (e.charge === 'windup') {
+        // Stand still, showing the committed charge path
+        e.chargeT -= dt;
+        if (e.chargeT <= 0) { e.charge = 'dash'; e.chargeT = rc.duration; }
+      } else if (e.charge === 'dash') {
+        // Straight line, no retargeting: punishable by changing direction
+        e.x += Math.cos(e.chargeAngle) * rc.speed * dt;
+        e.y += Math.sin(e.chargeAngle) * rc.speed * dt;
+        e.chargeT -= dt;
+        if (e.chargeT <= 0) { e.charge = null; e.chargeCd = rc.cooldown; }
+      } else {
+        e.zigzagTimer += dt;
+        if (e.zigzagTimer > 0.3) { e.zigzagTimer = 0; e.zigzagDir *= -1; }
+        const perpAngle = angle + Math.PI / 2 * e.zigzagDir;
+        e.x += (Math.cos(angle) * 0.7 + Math.cos(perpAngle) * 0.5) * e.speed * dt;
+        e.y += (Math.sin(angle) * 0.7 + Math.sin(perpAngle) * 0.5) * e.speed * dt;
+        e.chargeCd -= dt;
+        if (e.chargeCd <= 0 && Math.hypot(player.x - e.x, player.y - e.y) < rc.range) {
+          // Aim where the player will be, clamped inside the arena
+          const tx = Math.max(16, Math.min(CFG.W - 16, player.x + player.vx * rc.lead));
+          const ty = Math.max(16, Math.min(CFG.H - 16, player.y + player.vy * rc.lead));
+          e.chargeAngle = Math.atan2(ty - e.y, tx - e.x);
+          e.charge = 'windup';
+          e.chargeT = rc.windup;
+        }
+      }
     } else if (e.type === 'tank') {
       e.x += Math.cos(angle) * e.speed * dt;
       e.y += Math.sin(angle) * e.speed * dt;
@@ -596,7 +634,7 @@ function updateEnemies(dt) {
       if (e.phase2) {
         e.minionTimer -= dt;
         if (e.minionTimer <= 0) {
-          if (enemies.length < 15) spawnEnemy('walker');
+          if (enemies.length < 15) spawnEnemy('walker', true);
           e.minionTimer = 4.0;
         }
       }
@@ -610,6 +648,33 @@ function updateEnemies(dt) {
 
 function renderEnemies() {
   for (const e of enemies) {
+    if (e.spawnTimer > 0) {
+      // Arrival warning: flashing chevron pointing into the arena
+      if (Math.floor(e.spawnTimer * 10) % 2 === 0) {
+        const a = Math.atan2(CFG.H / 2 - e.y, CFG.W / 2 - e.x);
+        const s = Math.max(10, e.radius);
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(e.x + Math.cos(a + 2.5) * s, e.y + Math.sin(a + 2.5) * s);
+        ctx.lineTo(e.x + Math.cos(a) * s, e.y + Math.sin(a) * s);
+        ctx.lineTo(e.x + Math.cos(a - 2.5) * s, e.y + Math.sin(a - 2.5) * s);
+        ctx.stroke();
+      }
+      continue;
+    }
+    if (e.charge === 'windup') {
+      // Telegraph: the exact path the Runner is about to charge along
+      const len = RUNNER_CHARGE.speed * RUNNER_CHARGE.duration;
+      ctx.strokeStyle = 'rgba(233,69,96,0.7)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(e.x, e.y);
+      ctx.lineTo(e.x + Math.cos(e.chargeAngle) * len, e.y + Math.sin(e.chargeAngle) * len);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
     drawSprite(ctx, e.sprite, e.x, e.y, e.spriteScale, e.flashTimer > 0);
 
     // Boss health bar
