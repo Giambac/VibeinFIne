@@ -1,0 +1,180 @@
+WB-36 — PROMPT PER GEMINI OMNI 1.1 FLASH
+=======================================
+Prototipo: WB-36, bipede su ruote a mani complete (#51 del council)
+Tavola di riferimento: ProjVib01/blueprints/WB-36.html
+Data: 2026-10-09
+
+
+1. IL RISULTATO PUÒ ESSERE BUONO? VALUTAZIONE ONESTA
+----------------------------------------------------
+In sintesi: sì per una clip semplice in cui il robot rotola; no, per ora, se vuoi
+vedere bene le trasformazioni o il lavoro di precisione delle mani.
+
+Cosa gioca a favore
+- Il WB-36 assomiglia a robot che esistono davvero e che il modello ha visto in
+  migliaia di video: Boston Dynamics Handle, Ascento, Unitree con ruote, le parti
+  superiori dei robot umanoidi. Il modello ha quindi un "vocabolario" visivo per
+  produrlo: materiali, riflessi, ruote che girano, ambienti industriali.
+- Le recensioni dicono che ambienti, luce e superfici reggono bene.
+- Una sola azione continua (rotolare, rallentare, fermarsi) è il caso più facile.
+
+Cosa gioca contro
+- Il modello è debole proprio sui personaggi articolati in movimento complesso. In
+  un test pubblico un robot che ballava ha perso la testa a metà clip. Più giunti
+  si muovono insieme, più è probabile che il corpo si deformi.
+- Il corpo è insolito: due gambe che finiscono in ruote, senza piedi. Con il solo
+  testo il modello tende a "normalizzarlo" verso cose che conosce: gli fa
+  spuntare dei piedi e camminare, lo trasforma in un umanoide, oppure aggiunge
+  una terza ruota. È il rischio principale per la fedeltà al progetto.
+- La mossa caratteristica del WB-36, cioè sedersi sulla suola sollevando le
+  ruote, è una trasformazione a più giunti. Ha alta probabilità di uscire male
+  (gambe che si compenetrano, ruote che cambiano lato).
+- Le mani a cinque dita da vicino e la manipolazione fine sono un punto debole
+  noto di tutti i modelli video attuali.
+- Coerenza tra angolazioni: il modello può cambiare dettagli (lato della ruota
+  rispetto alla gamba, numero di dita) mentre la camera gira.
+
+Aspettative realistiche
+- Clip A (il robot rotola, inquadrato in carrellata):
+  buona probabilità di un video credibile, media probabilità che sia fedele al
+  progetto se usi solo il testo, buona se parti da un'immagine (vedi sotto).
+- Clip B (si ferma e si siede sulla suola):
+  sperimentale. Aspettati diversi tentativi e qualche deformazione.
+- Mani in primo piano che avvitano o assemblano:
+  sconsigliato. Se serve, tienilo lontano, breve e senza dita in primo piano.
+
+Conclusione: conviene, a patto di (a) partire da un'immagine fissa approvata e
+non dal solo testo, (b) chiedere una sola azione per clip, (c) fare le prove a
+360p prima di pagare risoluzioni alte.
+
+
+2. FLUSSO DI LAVORO CONSIGLIATO
+-------------------------------
+Passo 1. Genera un'immagine fotorealistica del robot fermo con un modello di
+         immagini (per esempio Gemini immagini). Usa come riferimento uno
+         screenshot della vista laterale e frontale di WB-36.html e il PROMPT
+         IMMAGINE della sezione 3.
+         Controlla che l'immagine abbia esattamente: 2 gambe con il ginocchio
+         piegato in avanti, una ruota all'estremità di ciascuna gamba montata sul
+         lato esterno, nessun piede, 2 braccia lunghe con mani a 5 dita, busto a
+         scatola arrotondata, testa piccola con due telecamere. Rigenera finché
+         non è giusta: tutto il resto dipende da questa immagine.
+Passo 2. In Omni 1.1 Flash usa image-to-video con quell'immagine come PRIMO
+         FOTOGRAMMA e il PROMPT CLIP A. Durata 8 s, 16:9, bozza a 360p.
+Passo 3. Se la bozza va bene, rigenera o fai l'upscale a 1080p o 4K.
+Passo 4. Solo dopo, prova la CLIP B: usa come primo fotogramma l'ultimo della
+         clip A, oppure la funzione "estendi scena".
+Alternativa: se preferisci il solo testo, usa il PROMPT CLIP A così com'è (è
+scritto per funzionare anche senza immagine) e fai 3-4 bozze a 360p.
+
+Note pratiche
+- I prompt sono in inglese: i modelli video seguono l'inglese in modo più
+  preciso. Le spiegazioni restano in italiano.
+- Il modello non ha un campo per il prompt negativo: le esclusioni sono scritte
+  dentro il prompt, alla fine.
+- L'audio viene generato insieme al video, quindi va descritto nel prompt.
+- Tieni il prompt compatto quando c'è un movimento di camera: un solo movimento,
+  nominato in termini cinematografici.
+
+
+3. PROMPT IMMAGINE (passo 1, per il fotogramma iniziale)
+--------------------------------------------------------
+Photorealistic product photograph of a prototype service robot standing in a
+clean concrete industrial hall. The robot is 150 cm tall and balances on two
+wheels. Body: a rounded, watertight, matte off-white box torso about 45 cm
+wide and 60 cm tall, with a flat dark rubber pad on its underside. Small
+rectangular head on a short neck, with two round stereo camera lenses and a
+small lidar window above them. Two legs hinge from the sides of the lower
+torso; each leg has a thigh and a shin of equal length, the knee bent forward
+at about 50 degrees, and ends in a single 36 cm rubber wheel mounted on the
+outer side of the shin with a short axle. There are no feet. Two long arms hang
+straight down from shoulder blocks at the top corners of the torso, each ending
+in a dark grey five-fingered robotic hand with an opposable thumb. Visible
+joint housings with brushed aluminium caps, thin orange safety stripes, small
+serial number "WB-36" printed on the torso. Three-quarter front view, eye-level
+camera, soft overhead daylight from skylights, shallow depth of field, 35 mm
+lens. No people, no text other than the small serial number.
+
+
+4. PROMPT CLIP A — il robot rotola (consigliata, 8 s, 16:9)
+-----------------------------------------------------------
+(Da usare in image-to-video con l'immagine del passo 1, oppure da solo.)
+
+A two-wheeled prototype robot rolls smoothly across a wide concrete floor of a
+sunlit industrial hall, then decelerates and stops in the centre of the frame.
+The robot is 150 cm tall: a rounded matte off-white box torso, a small head
+with two stereo camera lenses, two articulated legs with forward-bent knees
+that each end in one rubber wheel mounted on the outer side of the shin, and
+two long arms hanging at its sides with five-fingered robotic hands. It has no
+feet and never walks: it only rolls on its two wheels, balancing like a
+self-balancing robot, with the torso pitching slightly forward as it
+accelerates and slightly back as it brakes, and the knees flexing gently to
+absorb small bumps. The wheels visibly turn in the direction of travel.
+Camera: a smooth tracking shot moving alongside the robot at waist height,
+ending in a slow push-in once it stops. Look: realistic documentary footage,
+natural daylight from skylights, soft reflections on the floor, fine dust in
+the light beams, 35 mm lens, shallow depth of field.
+Sound: the quiet whine of electric hub motors, rubber tyres rolling on
+concrete, a short servo click as it stops, distant industrial hum. No music.
+Keep the robot's shape identical for the whole clip: exactly two legs, exactly
+two wheels, exactly two arms. No feet, no walking, no extra limbs, no people,
+no on-screen text or logos, no camera shake.
+
+Se usi image-to-video, aggiungi questa riga alla fine:
+Nothing about the robot's design, colours, proportions or wheel placement
+should change from the starting image.
+
+
+5. PROMPT CLIP B — si siede per lavorare (sperimentale, 8 s, 16:9)
+------------------------------------------------------------------
+(Primo fotogramma = ultimo fotogramma della clip A, oppure "estendi scena".)
+
+The same two-wheeled robot, standing still in the industrial hall, slowly
+lowers its torso straight down by folding both legs backward until the flat
+rubber pad under its torso rests on the floor. The wheels lift a few
+centimetres off the ground and stop turning. Then it raises both arms forward
+to waist height, palms facing down, ready to work at a low steel workbench in
+front of it. The motion is slow, deliberate and symmetrical, like a heavy
+machine docking. Camera: static side-on shot at waist height, full body in
+frame for the entire clip. Look: realistic documentary footage, soft daylight.
+Sound: servo motors whirring as the legs fold, a soft rubber thud as the torso
+pad touches the floor, quiet industrial ambience. No music.
+The robot keeps exactly two legs, two wheels and two arms throughout; the legs
+fold beside the torso and never pass through it. No feet, no people, no text.
+
+Perché è rischiosa: entrambe le gambe cambiano angolo di oltre 100 gradi mentre
+il busto scende di 60 cm. È il tipo di movimento articolato in cui il modello
+sbaglia più spesso. L'inquadratura laterale fissa aiuta, perché le due gambe si
+sovrappongono e il modello deve inventare meno.
+
+
+6. COME CAPIRE SE LA BOZZA È DA SCARTARE
+----------------------------------------
+Scarta e rigenera se vedi:
+- piedi che compaiono, oppure il robot che cammina invece di rotolare;
+- una terza ruota, o le ruote che passano dentro la gamba;
+- ruote ferme mentre il robot si muove, o che girano al contrario;
+- braccia o mani che si fondono con il busto, dita in numero variabile;
+- testa o parti che si staccano o "galleggiano";
+- busto che cambia forma o colore a metà clip.
+Accettabili per una bozza: riflessi imperfetti, piccole incoerenze delle dita da
+lontano, polvere o luce diverse da come le hai descritte.
+
+
+7. IMPOSTAZIONI RIASSUNTIVE
+---------------------------
+Modalità:   image-to-video (consigliata) oppure text-to-video
+Durata:     8 s (il modello accetta clip da 3 a 10 s)
+Formato:    16:9
+Bozze:      360p; finale a 1080p o 4K solo dopo l'approvazione
+Audio:      descritto nel prompt (viene generato insieme al video)
+Nota:       i video generati contengono il watermark invisibile SynthID.
+
+
+Fonti consultate sul modello (pagine di terze parti, non la documentazione
+ufficiale Google; le specifiche possono differire tra piattaforme):
+- https://www.mindstudio.ai/blog/gemini-omni-1-1-flash-video-model
+- https://fal.ai/learn/tools/how-to-use-gemini-omni-flash-1-1
+- https://runware.ai/docs/models/google-gemini-omni-flash-1-1/guides/reference-driven-video
+- https://morphic.com/resources/how-to/gemini-omni-flash-1-1-guide
+- https://layer.ai/models/google-gemini-omni-flash-1-1
