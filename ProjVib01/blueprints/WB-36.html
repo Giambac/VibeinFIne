@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="it">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>html,body{margin:0}</style>
+<title>Wheel-Biped WB-36</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+/* Layout: un unico foglio cianografico — cartiglio in alto, tre viste ortogonali, striscia delle modalità, poi tabelle tecniche in griglia. Tema unico deliberato (blueprint). */
+:root{
+  --paper:#0f3563; --paper-deep:#0b2a50; --grid:rgba(190,220,255,.07); --grid-major:rgba(190,220,255,.13);
+  --ink:#e9f2ff; --ink-dim:#a9c3e6; --dim:#8fd3ff; --hot:#ffcf6e; --hidden:rgba(233,242,255,.45);
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  --body:"IBM Plex Sans",system-ui,sans-serif;
+  color-scheme:dark;
+}
+html,body{background:var(--paper);color:var(--ink)}
+body{font-family:var(--body);font-size:15px;line-height:1.55;
+  background-color:var(--paper);
+  background-image:linear-gradient(var(--grid-major) 1px,transparent 1px),linear-gradient(90deg,var(--grid-major) 1px,transparent 1px),linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:100px 100px,100px 100px,20px 20px,20px 20px;
+  padding-inline:clamp(16px,4vw,48px);padding-block:28px 60px}
+.sheet{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+h1,h2,h3{font-family:var(--display);font-weight:600;letter-spacing:.04em;text-wrap:balance;margin:0}
+h1{font-size:clamp(34px,6vw,58px);line-height:1;text-transform:uppercase}
+h2{font-size:22px;text-transform:uppercase;letter-spacing:.12em;color:var(--ink)}
+h2 small{font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--ink-dim);text-transform:none;margin-left:10px}
+p{margin:0;max-width:68ch;color:var(--ink-dim)}
+.frame{border:1.5px solid var(--ink);padding:18px;position:relative}
+.frame::before{content:"";position:absolute;inset:5px;border:.5px solid var(--hidden);pointer-events:none}
+
+/* cartiglio */
+.titleblock{display:grid;grid-template-columns:1.6fr repeat(4,minmax(0,1fr));border:1.5px solid var(--ink)}
+.titleblock>div{padding:12px 14px;border-left:1px solid var(--hidden);min-width:0}
+.titleblock>div:first-child{border-left:0}
+.tb-k{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim)}
+.tb-v{font-family:var(--mono);font-size:14px;margin-top:4px}
+.tb-name .lede{margin-top:8px;font-size:14px}
+@media (max-width:820px){.titleblock{grid-template-columns:1fr 1fr}.titleblock>div:first-child{grid-column:1/-1}.titleblock>div{border-left:0;border-top:1px solid var(--hidden)}}
+
+/* viste */
+.views{display:grid;grid-template-columns:1.15fr 1.15fr .9fr;gap:18px}
+@media (max-width:980px){.views{grid-template-columns:1fr 1fr}}
+@media (max-width:620px){.views{grid-template-columns:1fr}}
+figure{margin:0;display:flex;flex-direction:column;gap:8px;min-width:0}
+figcaption{font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:var(--ink-dim);display:flex;justify-content:space-between;gap:8px;border-top:1px solid var(--hidden);padding-top:6px}
+figcaption b{color:var(--ink);font-weight:500}
+svg{display:block;width:100%;height:auto;max-width:100%}
+.modes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+@media (max-width:900px){.modes{grid-template-columns:1fr 1fr}}
+.mode p{font-size:13px}
+.mode h3{font-size:18px;text-transform:uppercase;letter-spacing:.08em}
+.mode .tag{font-family:var(--mono);font-size:11px;color:var(--hot)}
+
+/* tabelle */
+.cols{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:22px}
+@media (max-width:900px){.cols{grid-template-columns:1fr}}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--hidden);vertical-align:top}
+th{font-weight:500;color:var(--ink-dim);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;border-bottom:1px solid var(--ink)}
+td.n{text-align:right}
+tr.sum td{border-top:1px solid var(--ink);border-bottom:0;color:var(--hot)}
+.stack{display:flex;flex-direction:column;gap:22px;min-width:0}
+
+/* confronto punteggi */
+.score{display:grid;grid-template-columns:110px 1fr 34px;align-items:center;gap:8px 12px;font-family:var(--mono);font-size:12.5px}
+.track{display:grid;grid-template-columns:repeat(5,1fr);gap:3px}
+.track i{height:9px;border:1px solid var(--hidden)}
+.track i.on{background:var(--ink);border-color:var(--ink)}
+.track.base i.on{background:transparent;border-color:var(--dim);background-image:repeating-linear-gradient(45deg,var(--dim) 0 1px,transparent 1px 4px)}
+.score .lab{color:var(--ink-dim)}
+.score .delta{text-align:right}
+.up{color:var(--hot)} .dn{color:var(--ink-dim)}
+.legend{display:flex;gap:18px;font-family:var(--mono);font-size:11px;color:var(--ink-dim);flex-wrap:wrap}
+.legend span{display:inline-flex;gap:6px;align-items:center}
+.sw{width:22px;height:9px;display:inline-block;border:1px solid var(--ink);background:var(--ink)}
+.sw.b{background:transparent;border-color:var(--dim);background-image:repeating-linear-gradient(45deg,var(--dim) 0 1px,transparent 1px 4px)}
+
+/* massa */
+.massbar{display:flex;height:22px;border:1px solid var(--ink)}
+.massbar div{border-right:1px solid var(--paper);background:var(--ink);opacity:var(--o)}
+.masslist{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 18px;font-family:var(--mono);font-size:12px;margin-top:10px}
+.masslist span{display:flex;justify-content:space-between;border-bottom:1px dotted var(--hidden)}
+
+ul.risks{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px;color:var(--ink-dim);max-width:70ch}
+ul.risks b{color:var(--ink)}
+.note{font-family:var(--mono);font-size:12px;color:var(--hot);border:1px dashed var(--hot);padding:10px 12px;max-width:none}
+.prov{font-size:13.5px}
+.prov b{color:var(--ink);font-weight:500}
+</style>
+
+<div class="sheet">
+
+  <header class="titleblock">
+    <div class="tb-name">
+      <div class="tb-k">Morfologia selezionata dal council · tavola 1/1</div>
+      <h1>Wheel-Biped WB-36</h1>
+      <p class="lede">Due gambe-ruota articolate, due braccia con mani a 6 attuatori, busto rigido stagno con suola d'appoggio. Viaggia rotolando in equilibrio; per il lavoro di precisione si siede sulla suola e solleva le ruote.</p>
+    </div>
+    <div><div class="tb-k">Inviluppo</div><div class="tb-v">50 × 90 × 150 cm</div></div>
+    <div><div class="tb-k">Massa</div><div class="tb-v">70 kg</div></div>
+    <div><div class="tb-k">Complessità C</div><div class="tb-v">4 arti · 36 DOF · 13 tipi</div></div>
+    <div><div class="tb-k">Rev. / data</div><div class="tb-v">A · 2026-10-08</div></div>
+  </header>
+
+  <section class="views" aria-label="Viste ortogonali">
+    <figure class="frame"><svg id="side" role="img" aria-label="Vista laterale in assetto di marcia"></svg>
+      <figcaption><b>VISTA LATERALE</b><span>da −y · quote in cm</span></figcaption></figure>
+    <figure class="frame"><svg id="front" role="img" aria-label="Vista frontale"></svg>
+      <figcaption><b>VISTA FRONTALE</b><span>da +x · quote in cm</span></figcaption></figure>
+    <figure class="frame"><svg id="top" role="img" aria-label="Vista dall'alto"></svg>
+      <figcaption><b>PIANTA</b><span>da +z · avanti ↑</span></figcaption></figure>
+  </section>
+
+  <section class="stack">
+    <h2>Modalità operative <small>giunti in giallo = quelli che cambiano rispetto all'assetto di marcia</small></h2>
+    <div class="modes" id="modes"></div>
+  </section>
+
+  <section class="cols">
+    <div class="stack">
+      <div>
+        <h2>Giunti e corse <small>assi locali, postura zero</small></h2>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Giunto</th><th>Asse</th><th>Corsa</th><th>Default</th><th class="n">×</th></tr></thead>
+          <tbody>
+            <tr><td>Anca roll</td><td>+x</td><td>−25° … +25°</td><td>0°</td><td class="n">2</td></tr>
+            <tr><td>Anca pitch</td><td>−y</td><td>−110° … +100°</td><td>+25°</td><td class="n">2</td></tr>
+            <tr><td>Ginocchio</td><td>+y</td><td>0° … 165°</td><td>+50°</td><td class="n">2</td></tr>
+            <tr><td>Ruota (mozzo motore)</td><td>+y</td><td>continua</td><td>—</td><td class="n">2</td></tr>
+            <tr><td>Spalla yaw</td><td>+z</td><td>−150° … +150°</td><td>0°</td><td class="n">2</td></tr>
+            <tr><td>Spalla roll</td><td>+x</td><td>−90° … +90°</td><td>0°</td><td class="n">2</td></tr>
+            <tr><td>Spalla pitch</td><td>−y</td><td>−75° … +150°</td><td>0°</td><td class="n">2</td></tr>
+            <tr><td>Gomito</td><td>−y</td><td>0° … 145°</td><td>0°</td><td class="n">2</td></tr>
+            <tr><td>Prono-supinazione</td><td>asse avambraccio</td><td>−160° … +160°</td><td>0°</td><td class="n">2</td></tr>
+            <tr><td>Polso flessione</td><td>−y</td><td>−80° … +80°</td><td>0°</td><td class="n">2</td></tr>
+            <tr><td>Polso deviazione</td><td>+x</td><td>−35° … +35°</td><td>0°</td><td class="n">2</td></tr>
+            <tr><td>Dita ×4 (2 cerniere accoppiate 1:1)</td><td>trasversale</td><td>0° … 85°</td><td>dritte</td><td class="n">8</td></tr>
+            <tr><td>Pollice flessione</td><td>trasversale</td><td>0° … 85°</td><td>dritto</td><td class="n">2</td></tr>
+            <tr><td>Pollice opposizione</td><td>asse palmo</td><td>0° … 90°</td><td>0°</td><td class="n">2</td></tr>
+            <tr><td>Collo yaw</td><td>+z</td><td>−150° … +150°</td><td>0°</td><td class="n">1</td></tr>
+            <tr><td>Collo pitch</td><td>+y</td><td>−60° … +60°</td><td>0°</td><td class="n">1</td></tr>
+            <tr class="sum"><td>Totale attuatori indipendenti</td><td colspan="3">gambe 8 · braccia 14 · mani 12 · collo 2</td><td class="n">36</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div>
+        <h2>Rischi principali</h2>
+        <ul class="risks">
+          <li><b>Perdita d'equilibrio e terreno stretto.</b> Il contatto su due ruote dà poca stabilità passiva in beccheggio. Servono IMU ridondanti, limiti di velocità, una riserva di energia per il recupero e l'accovacciamento comandato. Validare i passaggi d'ostacolo prima della velocità.</li>
+          <li><b>Destrezza o precisione sopravvalutate.</b> Le dita accoppiate limitano la manipolazione in mano e i carichi delle braccia possono ribaltare il corpo parcheggiato. Destrezza tenuta a 4, limiti di carico sul poligono d'appoggio, verifica con sensore di forza al polso e visione.</li>
+          <li><b>Allagamento o galleggiamento instabile.</b> Compartimenti stagni separati, batteria in basso, sensori di perdita, prove di galleggiamento e raddrizzamento a carico prima delle prove in acqua.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div>
+        <h2>Contro l'umanoide <small>scala 1–5</small></h2>
+        <div class="legend"><span><i class="sw"></i>WB-36</span><span><i class="sw b"></i>umanoide di riferimento</span></div>
+        <div class="score" id="scores" style="margin-top:12px"></div>
+        <div class="tablewrap" style="margin-top:14px"><table>
+          <thead><tr><th>Complessità</th><th class="n">WB-36</th><th class="n">Umanoide</th></tr></thead>
+          <tbody>
+            <tr><td>Arti</td><td class="n">4</td><td class="n">4</td></tr>
+            <tr><td>DOF attuati</td><td class="n up">36</td><td class="n">44</td></tr>
+            <tr><td>Tipi di modulo</td><td class="n">13</td><td class="n">12</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div>
+        <h2>Budget di massa <small>70 kg</small></h2>
+        <div class="massbar" id="massbar" role="img" aria-label="Ripartizione della massa per sottosistema"></div>
+        <div class="masslist" id="masslist"></div>
+      </div>
+      <div>
+        <h2>Sensori</h2>
+        <p>Stereocamere a (10, ±4, 141). Finestra lidar/profondità a (10, 0, 147). Camera di terreno rivolta in basso a (22, 0, 84). IMU nel busto, encoder su ogni giunto, sensori forza-coppia a 6 assi ai polsi, pad tattili sui polpastrelli, sensori di perdita per compartimento.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="stack">
+    <h2>Da dove viene</h2>
+    <p class="prov">Quattro agenti (codex/GPT, Gemini, Antigravity, Sonnet) hanno proposto circa 60 morfologie in 4 round, contestandosi a vicenda; il brain (GPT-6 Astra) ha scelto. La famiglia ruota-bipede con mani complete è nata da <b>codex #51</b>, con varianti di <b>antigravity #63, #112</b> e <b>gemini #99</b>. È stata confermata nel round 3 da sonnet (#68), gemini (#75) e antigravity (#80) come l'unico design con un conteggio dei DOF onesto che mantiene mani di livello umano usando 8 attuatori in meno. Hanno perso: il centauro su ruote (#42, più veloce ma più complesso), il millepiedi a 6 whegs (#110, non verificato) e il carro anfibio (#106, niente ostacoli).</p>
+    <p class="note">Correzione di revisione rispetto alla specifica del brain: con spalle e anche entrambe a y = ±28 cm l'avambraccio passava attraverso il giunto d'anca. Nel disegno le spalle sono su supporti laterali a y = ±37 cm. La larghezza totale resta 90 cm, fissata dalle ruote.</p>
+  </section>
+</div>
+
+<script>
+(function(){
+const INK='var(--ink)',DIM='var(--dim)',HOT='var(--hot)',HID='var(--hidden)',PAPER='var(--paper)';
+const SW=0.45;
+// --- primitive SVG (coordinate in cm, schermo y = -z) ---
+const L=(x1,y1,x2,y2,c=INK,w=SW,d='')=>`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${c}" stroke-width="${w}" ${d?`stroke-dasharray="${d}"`:''} stroke-linecap="round"/>`;
+const R=(x,y,w,h,c=INK,rx=0,fill=PAPER,d='')=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${fill}" stroke="${c}" stroke-width="${SW}" ${d?`stroke-dasharray="${d}"`:''}/>`;
+const C=(x,y,r,c=INK,fill=PAPER,d='')=>`<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" stroke="${c}" stroke-width="${SW}" ${d?`stroke-dasharray="${d}"`:''}/>`;
+const T=(x,y,s,size=3.2,c=INK,anchor='middle',rot=0)=>`<text x="${x}" y="${y}" fill="${c}" font-family="IBM Plex Mono, monospace" font-size="${size}" text-anchor="${anchor}" ${rot?`transform="rotate(${rot} ${x} ${y})"`:''}>${s}</text>`;
+// arto spesso disegnato a contorno: tratto chiaro + tratto colore carta
+const limb=(a,b,w,c=INK)=>`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${c}" stroke-width="${w}" stroke-linecap="round"/><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${PAPER}" stroke-width="${w-0.9}" stroke-linecap="round"/>`;
+const joint=(p,c=INK,r=2.2)=>C(p[0],p[1],r,c)+L(p[0]-r*.6,p[1],p[0]+r*.6,p[1],c,.3)+L(p[0],p[1]-r*.6,p[0],p[1]+r*.6,c,.3);
+const wheel=(p,c=INK,dash='',r=18)=>{let s=C(p[0],p[1],r,c,PAPER,dash)+C(p[0],p[1],r-2.6,c,'none','1.2 1.2')+C(p[0],p[1],4.2,c);
+  for(let i=0;i<6;i++){const a=i*Math.PI/3;s+=L(p[0]+4.2*Math.cos(a),p[1]+4.2*Math.sin(a),p[0]+(r-2.6)*Math.cos(a),p[1]+(r-2.6)*Math.sin(a),c,.3)}return s};
+// quota con frecce
+function dim(x1,y1,x2,y2,label,off,vert){
+  const c=DIM;let s='';
+  if(vert){const X=x1+off;s+=L(x1,y1,X+(off>0?1.5:-1.5),y1,c,.25)+L(x2,y2,X+(off>0?1.5:-1.5),y2,c,.25)+L(X,y1,X,y2,c,.3);
+    s+=`<path d="M${X} ${y1} l-1 ${y2>y1?2.6:-2.6} h2 z M${X} ${y2} l-1 ${y2>y1?-2.6:2.6} h2 z" fill="${c}"/>`;
+    s+=T(X+(off>0?2.6:-2.6),(y1+y2)/2,label,3,c,'middle',-90);}
+  else{const Y=y1+off;s+=L(x1,y1,x1,Y+(off>0?1.5:-1.5),c,.25)+L(x2,y2,x2,Y+(off>0?1.5:-1.5),c,.25)+L(x1,Y,x2,Y,c,.3);
+    s+=`<path d="M${x1} ${Y} l${x2>x1?2.6:-2.6} -1 v2 z M${x2} ${Y} l${x2>x1?-2.6:2.6} -1 v2 z" fill="${c}"/>`;
+    s+=T((x1+x2)/2,Y+(off>0?4.2:-1.6),label,3,c);}
+  return s}
+const svg=(id,vb,inner)=>{const el=document.getElementById(id);el.setAttribute('viewBox',vb);el.innerHTML=inner};
+const rad=d=>d*Math.PI/180;
+
+// --- cinematica nel piano sagittale (x avanti, z su) ---
+function pose(o){
+  const p={hip:o.hip??25,knee:o.knee??50,sp:o.sp??0,el:o.el??0,dz:o.dz};
+  const tt=rad(p.hip),ts=rad(p.hip-p.knee);
+  const kneeRel=[32*Math.sin(tt),-32*Math.cos(tt)];
+  const ankRel=[kneeRel[0]+32*Math.sin(ts),kneeRel[1]-32*Math.cos(ts)];
+  const dz=p.dz!==undefined?p.dz:(18-(76+ankRel[1])); // ruota appoggiata a terra se dz non è imposto
+  const hip=[0,76+dz],knee=[hip[0]+kneeRel[0],hip[1]+kneeRel[1]],ank=[hip[0]+ankRel[0],hip[1]+ankRel[1]];
+  const sh=[0,119+dz],ta=rad(p.sp),tf=rad(p.sp+p.el);
+  const elb=[27*Math.sin(ta),sh[1]-27*Math.cos(ta)],wr=[elb[0]+25*Math.sin(tf),elb[1]-25*Math.cos(tf)];
+  const tip=[wr[0]+20*Math.sin(tf),wr[1]-20*Math.cos(tf)],palm=[wr[0]+12*Math.sin(tf),wr[1]-12*Math.cos(tf)];
+  return {dz,hip,knee,ank,sh,elb,wr,palm,tip};
+}
+// disegno vista laterale di una posa; hot = elenco di giunti evidenziati
+function drawSide(P,hot=[]){
+  const f=q=>[q[0],-q[1]];const hc=k=>hot.includes(k)?HOT:INK;
+  const z0=P.dz;let s='';
+  // gamba lato lontano tratteggiata (coincide in vista)
+  s+=wheel(f(P.ank),HID,'1.4 1');
+  // busto + suola
+  s+=R(-25,-(66+z0),50,6,INK,1.2)+R(-22,-(128+z0),44,62,INK,5);
+  s+=L(-22,-(98+z0),22,-(98+z0),HID,.3,'1.5 1');                 // linea compartimenti
+  s+=R(-13,-(84+z0)+-7,26,7,HID,0,'none','1 1');                // batteria (nascosta)
+  s+=C(22,-(84+z0),1.2,DIM,DIM);                                // camera terreno
+  // collo + testa
+  s+=R(-5,-(132+z0),10,4,INK)+R(-10,-(150+z0),20,18,INK,3)+L(9,-(146+z0),9,-(138+z0),DIM,1.4);
+  s+=joint(f([0,130+z0]),hc('neck'),1.6);
+  // gamba vicina
+  s+=limb(f(P.hip),f(P.knee),8)+limb(f(P.knee),f(P.ank),8)+wheel(f(P.ank));
+  s+=joint(f(P.hip),hc('hip'))+joint(f(P.knee),hc('knee'));
+  // braccio
+  s+=limb(f(P.sh),f(P.elb),10)+limb(f(P.elb),f(P.wr),9)+limb(f(P.wr),f(P.palm),4.5)+limb(f(P.palm),f(P.tip),2.4);
+  s+=joint(f(P.sh),hc('sh'))+joint(f(P.elb),hc('el'),1.9)+joint(f(P.wr),hc('wr'),1.5);
+  return s;
+}
+// --- VISTA LATERALE con quote ---
+(function(){
+  const P=pose({});let s=L(-60,0,75,0,INK,.6)+`<path d="M-60 0 h135" stroke="${HID}" stroke-width="3" stroke-dasharray=".4 1.6" transform="translate(0 1.6)"/>`;
+  s+=drawSide(P);
+  s+=dim(-25,-150,-25,0,'150',-14,true);
+  s+=dim(-25,-60,25,-60,'50',72,false);
+  s+=dim(-18,-18,18,-18,'Ø36',-24,false);
+  s+=T(17,-47,'13.5',2.6,DIM,'start')+L(0,-47,13.5,-47,DIM,.25,'1 .8');
+  s+=dim(22,-128,22,-66,'62',10,true);
+  s+=T(-58,-140,'z',3,DIM,'start')+L(-56,-136,-56,-128,DIM,.3)+T(-50,-125,'x →',3,DIM,'start');
+  // etichette
+  const lab=(x,y,t,tx,ty)=>L(x,y,tx,ty,INK,.25)+T(tx+(tx>x?1:-1),ty-.8,t,2.8,INK,tx>x?'start':'end');
+  s+=lab(10,-141,'testa · stereo',38,-152)+lab(0,-119,'spalla 3 DOF',40,-122)+lab(22,-63,'suola d\'appoggio',44,-70)+lab(-1,-76,'anca 2 DOF',-40,-80)+lab(13.5,-47,'ginocchio',40,-36)+lab(0,-18,'ruota-motore',-40,-12);
+  svg('side','-64 -160 140 172',s);
+})();
+// --- VISTA FRONTALE ---
+(function(){
+  let s=L(-60,0,60,0,INK,.6);
+  for(const sg of [1,-1]){
+    const y=v=>v*sg;
+    // ruota e assale
+    s+=R(Math.min(y(33),y(45)),-36,12,36,INK,3)+L(Math.min(y(33),y(45)),-18,Math.max(y(33),y(45)),-18,HID,.3,'1 1');
+    s+=limb([y(28),-18],[y(39),-18],5);
+    // gamba
+    s+=limb([y(28),-76],[y(28),-47],8)+limb([y(28),-47],[y(28),-18],8)+joint([y(28),-76])+joint([y(28),-47]);
+    // supporto spalla + braccio
+    s+=R(Math.min(y(22),y(33)),-125,11,10,INK,2);
+    s+=limb([y(37),-119],[y(37),-92],10)+limb([y(37),-92],[y(37),-67],9)+joint([y(37),-119])+joint([y(37),-92],INK,1.9);
+    s+=R(y(37)-5,-67,10,12,INK,1.5);
+    for(const o of [-3.3,-1.1,1.1,3.3]) s+=R(y(37)+o-.9,-55,1.8,8,INK,.8);
+    s+=`<line x1="${y(32)}" y1="-63" x2="${y(29.5)}" y2="-56" stroke="${INK}" stroke-width="2" stroke-linecap="round"/><line x1="${y(32)}" y1="-63" x2="${y(29.5)}" y2="-56" stroke="${PAPER}" stroke-width="1.1" stroke-linecap="round"/>`;
+  }
+  s+=R(-23,-66,46,6,INK,1.2)+R(-23,-128,46,62,INK,5)+L(-23,-98,23,-98,HID,.3,'1.5 1');
+  s+=R(-5,-132,10,4,INK)+R(-9,-150,18,18,INK,3)+C(-4,-141,1.6,DIM,DIM)+C(4,-141,1.6,DIM,DIM)+R(-3,-148,6,2.2,DIM,.6,'none');
+  s+=dim(-45,-36,45,-36,'90 (carreggiata 78)',44,false);
+  s+=dim(-23,-128,23,-128,'46',-6,false);
+  s+=dim(-42,-119,42,-119,'74 spalle',-34,false);
+  svg('front','-58 -168 116 180',s);
+})();
+// --- PIANTA ---
+(function(){
+  // schermo: orizzontale = y, verticale = -x (avanti in alto)
+  let s='';const X=v=>-v;
+  for(const sg of [1,-1]){const y=v=>v*sg;
+    s+=R(Math.min(y(33),y(45)),X(18),12,36,INK,3)+L(Math.min(y(33),y(45)),X(0),Math.max(y(33),y(45)),X(0),HID,.3,'1 1');
+    s+=limb([y(28),X(0)],[y(28),X(13.5)],8,HID);
+    s+=R(Math.min(y(22),y(33)),X(5),11,10,INK,2);
+    s+=C(y(37),X(0),5,INK)+R(y(37)-5,X(2),10,4,INK,1);
+  }
+  s+=R(-23,X(25),46,50,HID,1.2,PAPER,'1.4 1')+R(-23,X(22),46,44,INK,5);
+  s+=C(0,0,5,INK)+R(-9,X(10),18,20,INK,3)+L(-6,X(10),6,X(10),DIM,1.4);
+  s+=`<path d="M0 -36 l-2.4 4 h4.8 z" fill="${DIM}"/>`+T(0,-38.5,'avanti',2.8,DIM);
+  s+=dim(-23,X(-25),23,X(-25),'46',8,false);
+  s+=dim(23,X(25),23,X(-25),'50 suola',18,true);
+  svg('top','-50 -44 104 92',s);
+})();
+// --- MODALITÀ ---
+(function(){
+  const modes=[
+    {k:'Marcia veloce',tag:'anca 25° · ginocchio 50°',d:'Sterzo differenziale sulle ruote, fino a ~5 m/s su terreno compatto. Braccia raccolte, niente lavoro di precisione.',p:{},hot:[]},
+    {k:'Ostacolo',tag:'anca 65° · ginocchio 135° · braccia avanti',d:'Si accovaccia, appoggia le mani sul bordo e solleva le ruote una alla volta. Obiettivo iniziale: gradini da 15 cm. Non è arrampicata libera.',p:{hip:65,knee:135,sp:95,el:25},hot:['hip','knee','sh','el'],step:true},
+    {k:'Lavoro da seduto',tag:'anca −90° · ginocchio 160° · busto −60 cm',d:'Il busto scende di 60 cm finché la suola tocca terra; le ruote restano sollevate di 9 cm. Base rigida, mani a ~85 cm d\'altezza per l\'assemblaggio.',p:{hip:-90,knee:160,sp:60,el:90,dz:-60},hot:['hip','knee','sh','el']},
+    {k:'Nuoto lento',tag:'ginocchia 0–20° · bracciate laterali',d:'Galleggia grazie a ≥95 L di volume stagno; le gambe distese fanno da zavorra, le braccia remano. Solo acqua calma.',p:{hip:5,knee:12,sp:75,el:15,dz:-4},hot:['knee','sh'],water:true},
+  ];
+  const host=document.getElementById('modes');
+  host.innerHTML=modes.map((m,i)=>`<figure class="frame mode"><svg id="m${i}" role="img" aria-label="${m.k}"></svg><h3>${m.k}</h3><div class="tag">${m.tag}</div><p>${m.d}</p></figure>`).join('');
+  modes.forEach((m,i)=>{
+    const P=pose(m.p);let s='';
+    if(m.water){s+=`<path d="M-50 -${114} q5 -2 10 0 t10 0 t10 0 t10 0 t10 0 t10 0 t10 0 t10 0 t10 0 t10 0" fill="none" stroke="${DIM}" stroke-width=".5"/>`+T(46,-116,'≈ linea di galleggiamento',2.6,DIM,'end');}
+    else s+=L(-50,0,52,0,INK,.6);
+    if(m.step) s+=R(28,-15,24,15,DIM,0,'none','1 1')+T(40,-6,'15',2.6,DIM);
+    s+=drawSide(P,m.hot);
+    svg('m'+i,'-52 -162 106 170',s);
+  });
+})();
+// --- PUNTEGGI ---
+(function(){
+  const rows=[['Velocità',5,3],['Terreno',3,4],['Verticale',2,3],['Nuoto',2,3],['Destrezza',4,5],['Precisione',4,4]];
+  const bar=(v,cls)=>`<div class="track ${cls}">${[1,2,3,4,5].map(i=>`<i class="${i<=v?'on':''}"></i>`).join('')}</div>`;
+  document.getElementById('scores').innerHTML=rows.map(([n,a,b])=>{const d=a-b;return `<span class="lab">${n}</span><div style="display:flex;flex-direction:column;gap:3px">${bar(a,'')}${bar(b,'base')}</div><span class="delta ${d>0?'up':'dn'}">${d>0?'+':''}${d||'='}</span>`}).join('');
+})();
+// --- MASSA ---
+(function(){
+  const m=[['Batteria e potenza',14],['Busto, telaio, suola',12],['Gambe (6 giunti)',12],['Braccia (14 giunti)',12],['Ruote e motori',10],['Cavi, elettronica, tenute',5],['Testa, collo, sensori',3],['Mani',2]];
+  const tot=m.reduce((a,b)=>a+b[1],0);
+  document.getElementById('massbar').innerHTML=m.map(([n,v],i)=>`<div title="${n}: ${v} kg" style="width:${v/tot*100}%;--o:${1-i*0.1}"></div>`).join('');
+  document.getElementById('masslist').innerHTML=m.map(([n,v])=>`<span><span>${n}</span><span>${v} kg</span></span>`).join('')+`<span style="color:var(--hot)"><span>Totale</span><span>${tot} kg</span></span>`;
+})();
+})();
+</script>
+
+</html>
